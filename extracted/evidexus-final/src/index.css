@@ -1,0 +1,151 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Evidexus design system
+  OpenEvidence-inspired: white canvas, near-black ink, single deep royal violet accent.
+  No gradients, no shadows beyond hairlines, no severity colors.
+*/
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 8%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 8%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 8%;
+
+    /* Deep royal violet — single accent */
+    --primary: 262 83% 42%;
+    --primary-foreground: 0 0% 100%;
+    --primary-soft: 262 83% 96%;
+    --primary-glow: 262 83% 58%;
+
+    --secondary: 0 0% 97%;
+    --secondary-foreground: 0 0% 8%;
+
+    --muted: 0 0% 97%;
+    --muted-foreground: 0 0% 38%;
+
+    --accent: 262 83% 42%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 70% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 91%;
+    --input: 0 0% 91%;
+    --ring: 262 83% 42%;
+
+    --radius: 9999px;
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 0 0% 8%;
+    --sidebar-primary: 262 83% 42%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 97%;
+    --sidebar-accent-foreground: 0 0% 8%;
+    --sidebar-border: 0 0% 91%;
+    --sidebar-ring: 262 83% 42%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html, body, #root {
+    @apply bg-background text-foreground antialiased;
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    letter-spacing: -0.005em;
+    line-height: 1.6;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply tracking-tight text-foreground;
+    line-height: 1.18;
+  }
+
+  p {
+    line-height: 1.7;
+  }
+}
+
+@layer components {
+  .font-serif {
+    font-family: 'Playfair Display', Georgia, 'Times New Roman', serif;
+  }
+
+  /* Editorial body prose used in answers */
+  .prose-clinical {
+    @apply text-[15px] leading-[1.75] text-foreground;
+  }
+  .prose-clinical p { @apply mb-4; }
+  .prose-clinical h2 {
+    @apply font-serif text-[22px] font-bold mt-8 mb-3 text-foreground;
+  }
+  .prose-clinical h3 {
+    @apply text-[13px] uppercase tracking-[0.18em] font-semibold mt-6 mb-2 text-muted-foreground;
+  }
+  .prose-clinical ul { @apply space-y-2 mb-4 pl-5 list-disc marker:text-primary/60; }
+  .prose-clinical ol { @apply space-y-2 mb-4 pl-5 list-decimal marker:text-primary/60; }
+  .prose-clinical strong { @apply font-semibold text-foreground; }
+  .prose-clinical em { @apply italic; }
+
+  /* Inline citation chip — small violet superscript [1] [2] */
+  .cite-chip {
+    @apply inline-flex items-center justify-center align-super min-w-[18px] h-[18px] px-1
+           text-[10px] font-semibold text-primary bg-[hsl(var(--primary-soft))]
+           rounded-full mx-[1px] cursor-pointer hover:bg-primary hover:text-primary-foreground
+           transition-colors no-underline;
+    line-height: 1;
+  }
+
+  /* Soft pill chip used for capability/mode selectors and follow-ups */
+  .pill {
+    @apply inline-flex items-center gap-1.5 px-3.5 py-1.5 text-[13px] text-foreground
+           bg-background border border-border rounded-full hover:bg-muted transition-colors;
+  }
+  .pill-active {
+    @apply bg-foreground text-background border-foreground hover:bg-foreground;
+  }
+
+  /* Section eyebrow label */
+  .eyebrow {
+    @apply text-[11px] uppercase tracking-[0.18em] font-semibold text-muted-foreground;
+  }
+
+  /* Search bar halo (the soft violet ring around the OE-style input) */
+  .search-halo {
+    box-shadow:
+      0 0 0 1px hsl(var(--border)),
+      0 0 0 6px hsl(var(--primary) / 0.06),
+      0 1px 2px hsl(0 0% 0% / 0.04);
+  }
+  .search-halo:focus-within {
+    box-shadow:
+      0 0 0 1px hsl(var(--primary) / 0.4),
+      0 0 0 6px hsl(var(--primary) / 0.10),
+      0 1px 2px hsl(0 0% 0% / 0.04);
+  }
+
+  /* Subtle fade-in for answer content */
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .animate-fade-up { animation: fade-up 0.35s ease-out forwards; }
+}
