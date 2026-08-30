@@ -1,208 +1,67 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import {
-  corsHeaders,
-  enforceUsageLimit,
-  handleHttpError,
-  jsonResponse,
-  logQuery,
-  parseJsonBody,
-  requireAuth,
-  requireString,
-  withQueryId,
-} from "../_shared/security.ts";
+import { corsHeaders, enforceUsageLimit, handleHttpError, jsonResponse, logQuery, parseJsonBody, requireAuth, requireString, withQueryId } from "../_shared/security.ts";
 
-const PUBMED_SEARCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi";
-const PUBMED_FETCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi";
-const PUBMED_SUMMARY_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi";
-
-interface PubMedArticle {
-  pmid: string;
-  title: string;
-  authors: string;
-  journal: string;
-  year: number;
-  abstract: string;
-  pubType: string[];
+async function searchPubMed(query: string, max = 8) {
+  try {
+    const searchRes = await fetch(`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${encodeURIComponent(query)}&retmax=${max}&sort=relevance&retmode=json&mindate=2010&datetype=pdat`);
+    if (!searchRes.ok) return [];
+    const searchData = await searchRes.json();
+    const pmids: string[] = searchData.esearchresult?.idlist ?? [];
+    if (!pmids.length) return [];
+    const [summaryRes, fetchRes] = await Promise.all([
+      fetch(`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id=${pmids.join(",")}&retmode=json`),
+      fetch(`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=${pmids.join(",")}&rettype=abstract&retmode=xml`),
+    ]);
+    const summaryData = summaryRes.ok ? await summaryRes.json() : {};
+    const xml = fetchRes.ok ? await fetchRes.text() : "";
+    return pmids.map((pmid) => {
+      const s = summaryData.result?.[pmid];
+      if (!s) return null;
+      const pmidIdx = xml.indexOf(`<PMID Version="1">${pmid}</PMID>`);
+      let abstract = "";
+      if (pmidIdx !== -1) {
+        const next = xml.indexOf('<PMID Version="1">', pmidIdx + 10);
+        const chunk = xml.slice(pmidIdx, next > 0 ? next : pmidIdx + 8000);
+        const m = /<AbstractText[^>]*>([\s\S]*?)<\/AbstractText>/i.exec(chunk);
+        if (m) abstract = m[1].replace(/<[^>]*>/g, "").trim().slice(0, 600);
+      }
+      const authors = (s.authors ?? []).slice(0, 3).map((a: { name: string }) => a.name).join(", ");
+      return { pmid, title: s.title ?? "Untitled", authors: (s.authors?.length ?? 0) > 3 ? authors + " et al." : authors || "Unknown", journal: s.fulljournalname ?? s.source ?? "Unknown Journal", year: parseInt(s.pubdate ?? "") || new Date().getFullYear(), abstract: abstract || "Abstract not available.", pubTypes: s.pubtype ?? [] };
+    }).filter(Boolean);
+  } catch (err) { console.error("PubMed error:", err); return []; }
 }
 
-async function searchPubMed(query: string, maxResults = 10): Promise<string[]> {
-  const params = new URLSearchParams({
-    db: "pubmed",
-    term: query,
-    retmax: String(maxResults),
-    sort: "relevance",
-    retmode: "json",
-  });
-
-  const response = await fetch(`${PUBMED_SEARCH_URL}?${params}`);
-  if (!response.ok) throw new Error("PubMed search failed");
-  const data = await response.json();
-  return data.esearchresult?.idlist || [];
-}
-
-async function fetchArticleDetails(pmids: string[]): Promise<PubMedArticle[]> {
-  if (pmids.length === 0) return [];
-
-  const summaryParams = new URLSearchParams({ db: "pubmed", id: pmids.join(","), retmode: "json" });
-  const summaryResponse = await fetch(`${PUBMED_SUMMARY_URL}?${summaryParams}`);
-  if (!summaryResponse.ok) throw new Error("PubMed summary fetch failed");
-  const summaryData = await summaryResponse.json();
-
-  const fetchParams = new URLSearchParams({ db: "pubmed", id: pmids.join(","), rettype: "abstract", retmode: "xml" });
-  const fetchResponse = await fetch(`${PUBMED_FETCH_URL}?${fetchParams}`);
-  if (!fetchResponse.ok) throw new Error("PubMed abstract fetch failed");
-  const xmlText = await fetchResponse.text();
-
-  return pmids.flatMap((pmid) => {
-    const summary = summaryData.result?.[pmid];
-    if (!summary) return [];
-
-    const abstractRegex = new RegExp(`<PMID[^>]*>${pmid}</PMID>[\\s\\S]*?<AbstractText[^>]*>([\\s\\S]*?)</AbstractText>`, "i");
-    const abstractMatch = xmlText.match(abstractRegex);
-    let abstract = abstractMatch?.[1]?.replace(/<[^>]*>/g, "").trim() || "";
-    if (abstract.length > 500) abstract = `${abstract.substring(0, 497)}...`;
-
-    const authors = summary.authors?.slice(0, 3).map((author: { name: string }) => author.name).join(", ");
-    const authorString = summary.authors?.length > 3 ? `${authors} et al.` : authors || "Unknown";
-    const year = parseInt(summary.pubdate || "", 10) || new Date().getFullYear();
-
-    return [{
-      pmid,
-      title: summary.title || "Untitled",
-      authors: authorString,
-      journal: summary.fulljournalname || summary.source || "Unknown Journal",
-      year,
-      abstract,
-      pubType: summary.pubtype || [],
-    }];
-  });
-}
-
-function classifyStudyType(pubTypes: string[]) {
-  const types = pubTypes.map((type) => type.toLowerCase());
-  if (types.some((type) => type.includes("meta-analysis"))) return "Meta-Analysis";
-  if (types.some((type) => type.includes("systematic review"))) return "Systematic Review";
-  if (types.some((type) => type.includes("randomized controlled"))) return "RCT";
-  if (types.some((type) => type.includes("clinical trial"))) return "Clinical Trial";
-  if (types.some((type) => type.includes("review"))) return "Review";
-  if (types.some((type) => type.includes("guideline") || type.includes("practice guideline"))) return "Guideline";
-  if (types.some((type) => type.includes("case report"))) return "Case Report";
-  if (types.some((type) => type.includes("observational") || type.includes("cohort"))) return "Cohort Study";
-  return "Research Article";
-}
-
-function assignEvidenceLevel(type: string) {
-  switch (type) {
-    case "Meta-Analysis":
-    case "Systematic Review":
-      return "I";
-    case "RCT":
-      return "II";
-    case "Cohort Study":
-    case "Clinical Trial":
-      return "III";
-    case "Case Report":
-      return "IV";
-    default:
-      return "V";
-  }
+function grade(pubTypes: string[], title: string, abstract: string) {
+  const t = pubTypes.map((s: string) => s.toLowerCase()); const ti = title.toLowerCase(); const ab = abstract.toLowerCase();
+  if (t.some((x: string) => x.includes("meta-analysis"))) return { level: "I", label: "Meta-Analysis" };
+  if (t.some((x: string) => x.includes("systematic review")) || ti.includes("systematic review")) return { level: "I", label: "Systematic Review" };
+  if (t.some((x: string) => x.includes("randomized controlled")) || ab.includes("randomized controlled trial")) return { level: "II", label: "RCT" };
+  if (t.some((x: string) => x.includes("guideline")) || ti.includes("guideline")) return { level: "II", label: "Clinical Guideline" };
+  if (t.some((x: string) => x.includes("clinical trial")) || ab.includes("prospective")) return { level: "III", label: "Clinical Trial" };
+  if (t.some((x: string) => x.includes("case report"))) return { level: "IV", label: "Case Report" };
+  return { level: "V", label: "Review" };
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
     const { admin, userId } = await requireAuth(req);
     await enforceUsageLimit(admin, userId);
-
-    const { query } = await parseJsonBody<{ query?: unknown }>(req, 2_000);
-    const searchQuery = requireString(query, "Search query", 3, 300);
-
-    const pmids = await searchPubMed(searchQuery, 10);
-    if (pmids.length === 0) {
-      const emptyResult = {
-        query: searchQuery,
-        totalResults: 0,
-        results: [],
-        summary: "No studies found for this query. Try broadening your search terms.",
-      };
-      const queryId = await logQuery(admin, {
-        userId,
-        toolType: "literature_search",
-        queryText: searchQuery,
-        responseData: emptyResult,
-      });
-      return jsonResponse(withQueryId(emptyResult, queryId));
-    }
-
-    const articles = await fetchArticleDetails(pmids);
-    const results = articles.map((article, index) => {
-      const studyType = classifyStudyType(article.pubType);
-      const evidenceLevel = assignEvidenceLevel(studyType);
-      return {
-        title: article.title,
-        authors: article.authors,
-        journal: article.journal,
-        year: article.year,
-        type: studyType,
-        source: "PubMed",
-        abstract: article.abstract || "Abstract not available.",
-        evidenceLevel,
-        sampleSize: "See full text",
-        keyFindings: article.abstract ? `${article.abstract.substring(0, 150)}${article.abstract.length > 150 ? "..." : ""}` : "See full text for details.",
-        pmid: article.pmid,
-        relevanceScore: 1 - index * 0.08,
-      };
-    });
-
-    let summary = `Found ${results.length} studies from PubMed for "${searchQuery}".`;
-    const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
-    if (geminiApiKey && results.length > 0) {
+    const body = await parseJsonBody<{ query?: unknown }>(req, 4_000);
+    const searchQuery = requireString(body.query, "Query", 3, 500);
+    const geminiKey = Deno.env.get("GEMINI_API_KEY");
+    const articles = await searchPubMed(searchQuery, 8);
+    const results = articles.map((a: any) => { const { level, label } = grade(a.pubTypes, a.title, a.abstract); return { pmid: a.pmid, title: a.title, authors: a.authors, journal: a.journal, year: a.year, type: label, evidenceLevel: level, abstract: a.abstract, url: `https://pubmed.ncbi.nlm.nih.gov/${a.pmid}/` }; }).sort((a: any, b: any) => { const o: Record<string,number> = { I:1,II:2,III:3,IV:4,V:5 }; return (o[a.evidenceLevel]||5)-(o[b.evidenceLevel]||5)||b.year-a.year; });
+    let summary = `Found ${results.length} PubMed articles for "${searchQuery}".`;
+    if (geminiKey && results.length > 0) {
       try {
-        const studyList = results.slice(0, 5).map((result) => `- ${result.title} (${result.type}, ${result.year})`).join("\n");
-        const aiResponse = await fetch(, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${geminiApiKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "google/gemini-2.5-flash-lite",
-            messages: [
-              {
-                role: "system",
-                content: "You are a medical librarian. Provide a 2-3 sentence synthesis of the evidence landscape based on these real PubMed results. Be factual and neutral. Do not add information beyond what these studies suggest.",
-              },
-              {
-                role: "user",
-                content: `Query: "${searchQuery}"\n\nStudies found:\n${studyList}\n\nSummarize the evidence landscape.`,
-              },
-            ],
-            temperature: 0.2,
-          }),
-        });
-
-        if (aiResponse.ok) {
-          const aiData = await aiResponse.json();
-          summary = aiData.choices?.[0]?.message?.content || summary;
-        }
-      } catch (error) {
-        console.log("AI summary generation failed, using default:", error);
-      }
+        const studyList = results.slice(0, 5).map((r: any) => `- ${r.title} (${r.type}, ${r.year})`).join("\n");
+        const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${geminiKey}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: `Summarize evidence for "${searchQuery}" in 2-3 sentences:\n${studyList}` }] }], generationConfig: { temperature: 0.2, maxOutputTokens: 200 } }) });
+        if (aiRes.ok) { const aiData = await aiRes.json(); const t = aiData.candidates?.[0]?.content?.parts?.[0]?.text; if (t) summary = t; }
+      } catch (e) { console.error("Summary failed:", e); }
     }
-
-    const payload = { query: searchQuery, totalResults: results.length, results, summary };
-    const queryId = await logQuery(admin, {
-      userId,
-      toolType: "literature_search",
-      queryText: searchQuery,
-      responseData: payload,
-    });
-
-    return jsonResponse(withQueryId(payload, queryId));
-  } catch (error) {
-    return handleHttpError(error, "Search failed. Please try again.");
-  }
+    const payload = { query: searchQuery, total: results.length, results, summary };
+    const qid = await logQuery(admin, { userId, toolType: "literature_search", queryText: searchQuery, responseData: payload });
+    return jsonResponse(withQueryId(payload, qid));
+  } catch (err) { return handleHttpError(err, "Literature search error"); }
 });

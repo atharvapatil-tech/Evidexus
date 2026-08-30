@@ -72,7 +72,7 @@ serve(async (req) => {
       ? `Compare ${safeTreatmentA} vs ${safeTreatmentB} for the treatment of ${safeCondition}. Provide a structured clinical comparison.`
       : `Compare ${safeTreatmentA} vs ${safeTreatmentB}. Provide a structured clinical comparison.`;
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${geminiApiKey}`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${geminiApiKey}`,

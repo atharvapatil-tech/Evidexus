@@ -96,7 +96,7 @@ serve(async (req) => {
 
     const userMessage = `PRESCRIPTION:\n${safePrescription}\n\nPATIENT CONTEXT:\n${safePatientContext ?? "(none provided — flag missing critical context in 'missing_information')"}\n\nVerify this prescription from every clinical perspective and return the structured JSON.`;
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${geminiApiKey}`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${geminiApiKey}`,
