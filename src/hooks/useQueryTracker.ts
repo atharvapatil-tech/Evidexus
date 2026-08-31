@@ -43,12 +43,9 @@ export function useQueryTracker() {
   useEffect(() => { void fetchStats(); }, [fetchStats]);
 
   const checkLimit = useCallback(async (): Promise<boolean> => {
-    if (!user) return false;
-   const { data: profile } = await supabase
-  .from("profiles")
-  .select("plan")
-  .eq("user_id", user.id)
-  .maybeSingle();
+  if (!user) return false;
+  return true;
+}, [user]);
 
 const { data: profileById } = await supabase
   .from("profiles")
