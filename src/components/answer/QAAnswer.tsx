@@ -100,7 +100,7 @@ const QAAnswer = ({ data }: { data: ClinicalResponse }) => {
             Alternatives
           </p>
           <div className="space-y-2">
-            {data.alternatives.map((alt, i) => (
+            {(Array.isArray(data.alternatives) ? data.alternatives : []).map((alt, i) => (
               <div key={i} className="flex gap-2 text-[14px] text-foreground leading-relaxed">
                 <span className="text-muted-foreground mt-1 shrink-0">·</span>
                 <span>{alt}</span>
