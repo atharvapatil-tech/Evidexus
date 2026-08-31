@@ -1,11 +1,8 @@
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { toast } from "sonner";
 import { useCallback, useEffect, useState } from "react";
 
 type ToolType = "clinical_chat" | "literature_search" | "treatment_comparison" | "content_analysis" | "drug_interaction";
-
-const FREE_DAILY_LIMIT = 5;
 
 export function useQueryTracker() {
   const { user } = useAuth();
@@ -43,21 +40,7 @@ export function useQueryTracker() {
   useEffect(() => { void fetchStats(); }, [fetchStats]);
 
   const checkLimit = useCallback(async (): Promise<boolean> => {
-  if (!user) return false;
-  return true;
-}, [user]);
-
-const checkLimit = useCallback(async (): Promise<boolean> => {
-  if (!user) return false;
-  return true;
-}, [user]);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const { count } = await supabase.from("query_history").select("id", { count: "exact", head: true }).eq("user_id", user.id).gte("created_at", today.toISOString());
-    if ((count || 0) >= FREE_DAILY_LIMIT) {
-      toast.error(`Daily limit reached (${FREE_DAILY_LIMIT} queries/day). Upgrade to Pro for unlimited access.`);
-      return false;
-    }
+    if (!user) return false;
     return true;
   }, [user]);
 
@@ -82,7 +65,7 @@ const checkLimit = useCallback(async (): Promise<boolean> => {
     todayCount,
     totalCount,
     monthlyByTool,
-    remaining: Math.max(0, FREE_DAILY_LIMIT - todayCount),
+    remaining: 999,
     fetchStats,
   };
 }
