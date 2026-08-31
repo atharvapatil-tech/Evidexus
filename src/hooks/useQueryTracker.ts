@@ -47,14 +47,10 @@ export function useQueryTracker() {
   return true;
 }, [user]);
 
-const { data: profileById } = await supabase
-  .from("profiles")
-  .select("plan")
-  .eq("id", user.id)
-  .maybeSingle();
-
-const plan = profile?.plan || profileById?.plan;
-if (plan === "pro" || plan === "enterprise") return true;
+const checkLimit = useCallback(async (): Promise<boolean> => {
+  if (!user) return false;
+  return true;
+}, [user]);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const { count } = await supabase.from("query_history").select("id", { count: "exact", head: true }).eq("user_id", user.id).gte("created_at", today.toISOString());
