@@ -50,7 +50,7 @@ serve(async (req) => {
       };
     }
 
-    const payload = { query: safeQuery, confidence: parsed.confidence ?? "Moderate", clinical_summary: parsed.clinical_summary ?? "", first_line_treatment: parsed.first_line_treatment ?? "", alternatives: parsed.alternatives ?? [], dosage: parsed.dosage ?? "", contraindications: parsed.contraindications ?? [], clinical_reasoning: parsed.clinical_reasoning ?? "", india_context: parsed.india_context ?? "", evidence_note: "Evidence from AI synthesis", retrieved_evidence: [], evidence_summary: { total: 0, highest_level: "N/A", year_range: "N/A" }, suggested_follow_ups: [] };
+    const payload = { query: safeQuery, confidence: parsed.confidence ?? "Moderate", clinical_summary: parsed.clinical_summary ?? "", first_line_treatment: parsed.first_line_treatment ?? "", alternatives: Array.isArray(parsed.alternatives) ? parsed.alternatives : typeof parsed.alternatives === "string" && parsed.alternatives ? [parsed.alternatives] : [], dosage: parsed.dosage ?? "", contraindications: parsed.contraindications ?? [], clinical_reasoning: parsed.clinical_reasoning ?? "", india_context: parsed.india_context ?? "", evidence_note: "Evidence from AI synthesis", retrieved_evidence: [], evidence_summary: { total: 0, highest_level: "N/A", year_range: "N/A" }, suggested_follow_ups: [] };
 
     const qid = await logQuery(admin, { userId, toolType: "clinical_chat", queryText: safeQuery, responseData: payload });
     return jsonResponse(withQueryId(payload, qid));

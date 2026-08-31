@@ -11,7 +11,7 @@ type ClinicalResponse = {
   query?: string;
   clinical_summary: string;
   first_line_treatment: string;
-  alternatives: string[];
+  alternatives: string[] | string;
   dosage: string;
   contraindications: string[];
   clinical_reasoning: string;
